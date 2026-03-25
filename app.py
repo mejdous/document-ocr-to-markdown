@@ -132,6 +132,7 @@ async def image_to_markdown(request: Request) -> Response:
 async def _image_to_markdown_impl(request: Request) -> Response:
     logger.info("image_to_markdown: request received.")
 
+
     content_type = request.headers.get("content-type", "")
 
     # Multipart/form-data (--form) or raw body (--data-binary)
@@ -139,17 +140,25 @@ async def _image_to_markdown_impl(request: Request) -> Response:
     if "multipart/form-data" in content_type:
         try:
             form = await request.form()
-            for field in form.values():
+            logger.info(f"Champs reçus dans le form: {list(form.keys())}")
+            for field_name, field in form.items():
                 if hasattr(field, "read"):
                     img_bytes = await field.read()
+                    logger.info(f"Champ lu: {field_name}, taille: {len(img_bytes)} octets")
+                    logger.info(f"Premiers octets: {img_bytes[:16].hex()}")
                     break
-        except Exception:
+        except Exception as exc:
+            logger.error(f"Erreur lors de la lecture du form: {exc}")
             img_bytes = None
 
     if not img_bytes:
         img_bytes = await request.body() or None
+        if img_bytes:
+            logger.info(f"Lecture du body brut, taille: {len(img_bytes)} octets")
+            logger.info(f"Premiers octets: {img_bytes[:16].hex()}")
 
     if not img_bytes:
+        logger.warning("Aucun contenu image fourni dans la requête.")
         return PlainTextResponse(
             "Aucun contenu image fourni dans le corps de la requête.",
             status_code=400,
