@@ -26,6 +26,19 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# ---------------------------------------------------------------------------
+# Singleton RapidOCR — chargé une seule fois au démarrage (économie mémoire)
+# ---------------------------------------------------------------------------
+try:
+    import numpy as np
+    from PIL import Image as PILImage
+    from rapidocr_onnxruntime import RapidOCR
+    _ocr = RapidOCR()
+    logger.info("RapidOCR initialisé au démarrage.")
+except Exception as _ocr_init_err:
+    _ocr = None
+    logger.error(f"Impossible d'initialiser RapidOCR : {_ocr_init_err}")
+
 
 # ---------------------------------------------------------------------------
 # GET /diag
@@ -47,12 +60,10 @@ async def diag() -> str:
     # Functional RapidOCR test on a tiny white image
     lines.append("")
     try:
-        import numpy as np
-        from rapidocr_onnxruntime import RapidOCR
-
-        ocr = RapidOCR()
+        if _ocr is None:
+            raise RuntimeError("RapidOCR non initialisé (voir logs de démarrage)")
         dummy = np.ones((10, 10, 3), dtype=np.uint8) * 255
-        result, _ = ocr(dummy)
+        result, _ = _ocr(dummy)
         lines.append("✅ RapidOCR functional")
     except Exception as exc:
         lines.append(f"❌ RapidOCR functional — {exc}")
@@ -164,14 +175,9 @@ async def _image_to_markdown_impl(request: Request) -> Response:
             status_code=400,
         )
 
-    try:
-        import numpy as np  # noqa: PLC0415
-        from PIL import Image as PILImage  # noqa: PLC0415
-        from rapidocr_onnxruntime import RapidOCR  # noqa: PLC0415
-    except ImportError as exc:
-        logger.error("rapidocr-onnxruntime not available: %s", exc)
+    if _ocr is None:
         return PlainTextResponse(
-            "La dépendance rapidocr-onnxruntime n'est pas installée sur le serveur.",
+            "La dépendance rapidocr-onnxruntime n'est pas disponible sur le serveur.",
             status_code=500,
         )
 
@@ -179,7 +185,7 @@ async def _image_to_markdown_impl(request: Request) -> Response:
         pil_img = PILImage.open(io.BytesIO(img_bytes)).convert("RGB")
 
         # Redimensionner si l'image est trop grande (évite timeout/OOM sur Render)
-        MAX_DIM = 2048
+        MAX_DIM = 1500
         w, h = pil_img.size
         if max(w, h) > MAX_DIM:
             scale = MAX_DIM / max(w, h)
@@ -189,8 +195,7 @@ async def _image_to_markdown_impl(request: Request) -> Response:
 
         img_array = np.array(pil_img)
 
-        ocr = RapidOCR()
-        result, _ = ocr(img_array)
+        result, _ = _ocr(img_array)
 
         if not result:
             return Response(
