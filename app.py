@@ -177,6 +177,16 @@ async def _image_to_markdown_impl(request: Request) -> Response:
 
     try:
         pil_img = PILImage.open(io.BytesIO(img_bytes)).convert("RGB")
+
+        # Redimensionner si l'image est trop grande (évite timeout/OOM sur Render)
+        MAX_DIM = 2048
+        w, h = pil_img.size
+        if max(w, h) > MAX_DIM:
+            scale = MAX_DIM / max(w, h)
+            new_w, new_h = int(w * scale), int(h * scale)
+            pil_img = pil_img.resize((new_w, new_h), PILImage.LANCZOS)
+            logger.info(f"Image redimensionnée: {w}x{h} → {new_w}x{new_h}")
+
         img_array = np.array(pil_img)
 
         ocr = RapidOCR()
