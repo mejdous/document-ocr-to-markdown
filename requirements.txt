@@ -5,4 +5,5 @@ pymupdf>=1.24.0
 pymupdf4llm>=0.0.17
 numpy>=1.26.0
 Pillow>=10.3.0
+opencv-python-headless>=4.8.0
 rapidocr-onnxruntime
